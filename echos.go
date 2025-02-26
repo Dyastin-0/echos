@@ -31,7 +31,7 @@ func Start(upgrader *websocket.Upgrader, auth authFunc) {
 	http.HandleFunc("/websocket", websocketHandler(upgrader, auth))
 
 	http.HandleFunc("/meeting", func(w http.ResponseWriter, r *http.Request) {
-		if err = indexTemplate.Execute(w, "ws://"+r.Host+"/websocket?"+r.URL.RawQuery); err != nil {
+		if err = indexTemplate.Execute(w, "wss://"+r.Host+"/websocket?"+r.URL.RawQuery); err != nil {
 			log.Errorf("Failed to parse index template: %v", err)
 		}
 	})
