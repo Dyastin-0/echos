@@ -4,6 +4,8 @@ MAIN_PACKAGE := ./cmd/main.go
 BINARY_NAME := $(APP)
 SERVICE_FILE := $(APP).service
 SERVICE_PATH := /etc/systemd/system/$(SERVICE_FILE)
+INDEX_FILE := index.html
+INDEX_FILE_PATH := /opt/$(APP)/$(INDEX_FILE)
 
 .PHONY: all build install  copy_config  reload restart start status
 
@@ -27,6 +29,13 @@ build:
 		echo "$(APP): $(SERVICE_FILE) successfully copied to $(SERVICE_PATH)"; \
 	else \
 		echo "$(APP): Failed to copy $(SERVICE_FILE). Check permissions or path."; \
+		exit 1; \
+	fi
+	@sudo cp $(INDEX_FILE) $(INDEX_FILE_PATH)
+	@if [ $$? -eq 0 ]; then \
+		echo "$(APP): $(INDEX_FILE) successfully copied to $(INDEX_FILE_PATH)"; \
+	else \
+		echo "$(APP): Failed to copy $(INDEX_FILE). Check permissions or path."; \
 		exit 1; \
 	fi
 
