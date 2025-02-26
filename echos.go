@@ -12,6 +12,8 @@ import (
 
 var (
 	addr          = flag.String("addr", ":8080", "http service address")
+	domain        = flag.String("domain", "localhost:8080", "http service domain")
+	secure        = flag.String("secure", "", "ws secure")
 	indexTemplate = &template.Template{}
 	Rooms         map[string]*Room
 	log           = logging.NewDefaultLoggerFactory().NewLogger("sfu-ws")
@@ -31,7 +33,7 @@ func Start(upgrader *websocket.Upgrader, auth authFunc) {
 	http.HandleFunc("/websocket", websocketHandler(upgrader, auth))
 
 	http.HandleFunc("/meeting", func(w http.ResponseWriter, r *http.Request) {
-		if err = indexTemplate.Execute(w, "wss://"+r.Host+"/websocket?"+r.URL.RawQuery); err != nil {
+		if err = indexTemplate.Execute(w, "ws"+*secure+"://"+*domain+"/websocket?"+r.URL.RawQuery); err != nil {
 			log.Errorf("Failed to parse index template: %v", err)
 		}
 	})
