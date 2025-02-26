@@ -22,7 +22,6 @@ build:
 
  copy_config:
 	@echo "$(APP): Copying files..."
-	fi
 	@sudo cp $(SERVICE_FILE) $(SERVICE_PATH)
 	@if [ $$? -eq 0 ]; then \
 		echo "$(APP): $(SERVICE_FILE) successfully copied to $(SERVICE_PATH)"; \
