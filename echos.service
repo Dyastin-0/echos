@@ -1,0 +1,15 @@
+[Unit]
+Description=echos
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/echos
+ExecStart=/opt/echos/echos
+Restart=always
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=echos
+
+[Install]
+WantedBy=multi-user.target
