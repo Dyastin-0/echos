@@ -8,11 +8,7 @@ import (
 )
 
 func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{URLs: []string{"stun:stun.l.google.com:19302"}},
-		},
-	})
+	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		return nil, err
 	}
