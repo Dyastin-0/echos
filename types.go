@@ -1,11 +1,14 @@
 package echos
 
 import (
+	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 )
+
+type authFunc func(r *http.Request) bool
 
 type websocketMessage struct {
 	Event string `json:"event"`

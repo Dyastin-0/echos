@@ -7,7 +7,36 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func initPeer(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
+func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
+	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, typ := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio} {
+		if _, err := pc.AddTransceiverFromKind(typ, webrtc.RTPTransceiverInit{
+			Direction: webrtc.RTPTransceiverDirectionRecvonly,
+		}); err != nil {
+			log.Errorf("Failed to add transceiver: %v", err)
+			return nil, err
+		}
+	}
+
+	r.listLock.Lock()
+	r.peerConnections = append(r.peerConnections, peerConnectionState{pc, ws})
+	r.listLock.Unlock()
+
+	onICECandidate(pc, ws)
+	onConnectionStateChange(pc, r)
+	onTrack(pc, r)
+	onICEConnectionStateChange(pc)
+
+	r.SignalPeerConnections()
+
+	return pc, nil
+}
+
+func onICECandidate(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 	pc.OnICECandidate(func(i *webrtc.ICECandidate) {
 		if i == nil {
 			return
@@ -28,7 +57,9 @@ func initPeer(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 			log.Errorf("Failed to write JSON: %v", writeErr)
 		}
 	})
+}
 
+func onConnectionStateChange(pc *webrtc.PeerConnection, r *Room) {
 	pc.OnConnectionStateChange(func(p webrtc.PeerConnectionState) {
 		log.Infof("Connection state change: %s", p)
 
@@ -38,16 +69,18 @@ func initPeer(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 				log.Errorf("Failed to close PeerConnection: %v", err)
 			}
 		case webrtc.PeerConnectionStateClosed:
-			signalPeerConnections()
+			r.SignalPeerConnections()
 		default:
 		}
 	})
+}
 
+func onTrack(pc *webrtc.PeerConnection, r *Room) {
 	pc.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		log.Infof("Got remote track: Kind=%s, ID=%s, PayloadType=%d", t.Kind(), t.ID(), t.PayloadType())
 
-		trackLocal := addTrack(t)
-		defer removeTrack(trackLocal)
+		trackLocal := r.AddTrack(t)
+		defer r.RemoveTrack(trackLocal)
 
 		buf := make([]byte, 1500)
 		rtpPkt := &rtp.Packet{}
@@ -71,7 +104,9 @@ func initPeer(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 			}
 		}
 	})
+}
 
+func onICEConnectionStateChange(pc *webrtc.PeerConnection) {
 	pc.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
 		log.Infof("ICE connection state changed: %s", is)
 	})

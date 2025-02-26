@@ -4,33 +4,23 @@ import (
 	"flag"
 	"net/http"
 	"os"
-	"sync"
 	"text/template"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/logging"
-	"github.com/pion/webrtc/v4"
 )
 
 var (
-	addr     = flag.String("addr", ":8080", "http service address")
-	upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
-	}
+	addr          = flag.String("addr", ":8080", "http service address")
 	indexTemplate = &template.Template{}
-
-	listLock        sync.RWMutex
-	peerConnections []peerConnectionState
-	trackLocals     map[string]*webrtc.TrackLocalStaticRTP
-
-	log = logging.NewDefaultLoggerFactory().NewLogger("sfu-ws")
+	Rooms         map[string]*Room
+	log           = logging.NewDefaultLoggerFactory().NewLogger("sfu-ws")
 )
 
-func Start() {
+func Start(upgrader *websocket.Upgrader, auth authFunc) {
 	flag.Parse()
 
-	trackLocals = map[string]*webrtc.TrackLocalStaticRTP{}
+	Rooms = make(map[string]*Room)
 
 	indexHTML, err := os.ReadFile("index.html")
 	if err != nil {
@@ -38,19 +28,13 @@ func Start() {
 	}
 	indexTemplate = template.Must(template.New("").Parse(string(indexHTML)))
 
-	http.HandleFunc("/websocket", websocketHandler)
+	http.HandleFunc("/websocket", websocketHandler(upgrader, auth))
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if err = indexTemplate.Execute(w, "ws://"+r.Host+"/websocket"); err != nil {
+	http.HandleFunc("/meeting", func(w http.ResponseWriter, r *http.Request) {
+		if err = indexTemplate.Execute(w, "ws://"+r.Host+"/websocket?"+r.URL.RawQuery); err != nil {
 			log.Errorf("Failed to parse index template: %v", err)
 		}
 	})
-
-	go func() {
-		for range time.NewTicker(time.Second * 3).C {
-			dispatchKeyFrame()
-		}
-	}()
 
 	if err = http.ListenAndServe(*addr, nil); err != nil {
 		log.Errorf("Failed to start http server: %v", err)

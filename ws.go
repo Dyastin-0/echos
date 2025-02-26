@@ -2,14 +2,17 @@ package echos
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 )
 
 func wsListen(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 	message := &websocketMessage{}
+
 	for {
 		_, raw, err := ws.ReadMessage()
 		if err != nil {
@@ -57,39 +60,44 @@ func wsListen(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 	}
 }
 
-func websocketHandler(w http.ResponseWriter, r *http.Request) {
-	unsafeConn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Errorf("Failed to upgrade HTTP to Websocket: ", err)
-		return
-	}
-
-	ws := &threadSafeWriter{unsafeConn, sync.Mutex{}}
-
-	defer ws.Close()
-
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		log.Errorf("Failed to creates a PeerConnection: %v", err)
-		return
-	}
-
-	defer pc.Close()
-
-	for _, typ := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio} {
-		if _, err := pc.AddTransceiverFromKind(typ, webrtc.RTPTransceiverInit{
-			Direction: webrtc.RTPTransceiverDirectionRecvonly,
-		}); err != nil {
-			log.Errorf("Failed to add transceiver: %v", err)
+func websocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, rq *http.Request) {
+		if !auth(rq) {
+			log.Errorf("Failed to upgrade HTTP to Websocket: ", fmt.Errorf("unauthorized"))
 			return
 		}
+
+		roomID := rq.URL.Query().Get("room")
+
+		if roomID == "" {
+			log.Errorf("Failed to upgrade HTTP to Websocket: ", fmt.Errorf("bad request"))
+			return
+		}
+
+		unsafeConn, err := upgrader.Upgrade(w, rq, nil)
+		if err != nil {
+			log.Errorf("Failed to upgrade HTTP to Websocket: ", err)
+			return
+		}
+
+		r, ok := Rooms[roomID]
+		if !ok {
+			Rooms[roomID] = NewRoom()
+			r = Rooms[roomID]
+		}
+
+		ws := &threadSafeWriter{unsafeConn, sync.Mutex{}}
+
+		defer ws.Close()
+
+		pc, err := NewPeer(r, ws)
+		if err != nil {
+			log.Errorf("Failed to creates a PeerConnection: %v", err)
+			return
+		}
+
+		defer pc.Close()
+
+		wsListen(pc, ws)
 	}
-
-	listLock.Lock()
-	peerConnections = append(peerConnections, peerConnectionState{pc, ws})
-	listLock.Unlock()
-
-	initPeer(pc, ws)
-	signalPeerConnections()
-	wsListen(pc, ws)
 }
