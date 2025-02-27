@@ -1,6 +1,6 @@
 module github.com/Dyastin-0/echos
 
-go 1.23.4
+go 1.24.0
 
 require (
 	github.com/gorilla/websocket v1.5.3
