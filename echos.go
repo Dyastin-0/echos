@@ -12,6 +12,7 @@ import (
 
 var (
 	addr          = flag.String("addr", ":8080", "http service address")
+	domain        = flag.String("domain", "localhost:8080", "http service domain")
 	secure        = flag.Bool("secure", false, "ws secure")
 	indexTemplate = &template.Template{}
 	Rooms         map[string]*Room
@@ -36,7 +37,7 @@ func Start(upgrader *websocket.Upgrader, auth authFunc) {
 		if *secure {
 			protocol = "wss"
 		}
-		if err = indexTemplate.Execute(w, protocol+"://"+r.Host+"/websocket?"+r.URL.RawQuery); err != nil {
+		if err = indexTemplate.Execute(w, protocol+"://"+*domain+"/websocket?"+r.URL.RawQuery); err != nil {
 			log.Errorf("Failed to parse index template: %v", err)
 		}
 	})
