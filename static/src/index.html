@@ -9,33 +9,89 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <script src="https://kit.fontawesome.com/65c673ed11.js" crossorigin="anonymous"></script>
   </head>
   <body class="relative flex flex-col w-full h-screen items-center gap-4 p-4 bg-[var(--bg-primary)]">
-    <video id="localVideo" class="absolute bottom-4 right-4 h-[132px] rounded-lg z-50 border border-[var(--accent)]" autoplay></video>
+
     <div class="flex flex-col md:flex-row gap-6 items-center">
       <div class="text-center">
         <div id="remoteVideos" class="flex w-fit flex-wrap gap-4 justify-center"></div>
       </div>
     </div>
+    
+    <video id="localVideo" class="absolute bottom-4 right-4 h-[100px] rounded-lg z-50 border border-[var(--accent)]" muted autoplay></video>
+    <div class="absolute bottom-4">
+      <div class="flex gap-4">
+        <button id="muteButton" class="p-3 min-w-12 min-h-12 bg-[var(--bg-secondary)] rounded-full hover:bg-[var(--accent)]">
+          <i id="muteIcon" class="fa-solid fa-microphone"></i>
+        </button>
+        <button id="cameraButton" class="p-3 min-w-12 min-h-12 bg-[var(--bg-secondary)] rounded-full hover:bg-[var(--accent)]">
+          <i id="cameraIcon" class="fa-solid fa-video"></i>
+        </button>
+      </div>
+    </div>
 
     <script>
+      //local video controls
+      const muteButton = document.querySelector('#muteButton');
+      const muteIcon = document.querySelector('#muteIcon');
+      const cameraButton = document.querySelector('#cameraButton');
+      const cameraIcon = document.querySelector('#cameraIcon');
+      let audioTrack, videoTrack;
+
+      //local video
+      const localVideo = document.getElementById('localVideo');
+      let isDragging = false;
+      let offsetX, offsetY;
+
+      localVideo.style.position = 'absolute';
+      localVideo.style.cursor = 'grab';
+
+      localVideo.addEventListener('mousedown', (event) => {
+        isDragging = true;
+        offsetX = event.clientX - localVideo.getBoundingClientRect().left;
+        offsetY = event.clientY - localVideo.getBoundingClientRect().top;
+        localVideo.style.cursor = 'grabbing';
+      });
+
+      document.addEventListener('mousemove', (event) => {
+        if (!isDragging) return;
+        
+        let newX = event.clientX - offsetX;
+        let newY = event.clientY - offsetY;
+
+        const maxX = window.innerWidth - localVideo.clientWidth;
+        const maxY = window.innerHeight - localVideo.clientHeight;
+
+        newX = Math.max(32, Math.min(newX, maxX)) - 16;
+        newY = Math.max(32, Math.min(newY, maxY)) - 16;
+
+        localVideo.style.left = `${newX}px`;
+        localVideo.style.top = `${newY}px`;
+      });
+
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+        localVideo.style.cursor = 'grab';
+      });
+  
+      // stream
       navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
         let pc = new RTCPeerConnection();
+        document.getElementById('localVideo').srcObject = stream;
+
+        audioTrack = stream.getAudioTracks()[0];
+        videoTrack = stream.getVideoTracks()[0];
+
         pc.ontrack = function (event) {
-          if (event.track.kind === 'audio') {
-            return;
-          }
+          if (event.track.kind === 'audio') return;
 
           let el = document.createElement(event.track.kind);
           el.srcObject = event.streams[0];
           el.autoplay = true;
-          el.classList.add("rounded-lg", "max-h-[200px]");
+          el.classList.add("rounded-lg", "max-h-[400px]");
           document.getElementById('remoteVideos').appendChild(el);
-
-          event.track.onmute = function(event) {
-            el.play();
-          };
 
           event.streams[0].onremovetrack = ({track}) => {
             if (el.parentNode) {
@@ -44,53 +100,61 @@
           };
         };
 
-        document.getElementById('localVideo').srcObject = stream;
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
         let ws = new WebSocket("{{.}}");
+
         pc.onicecandidate = e => {
-          if (!e.candidate) {
-            return;
-          }
-          ws.send(JSON.stringify({event: 'candidate', data: JSON.stringify(e.candidate)}));
+          if (!e.candidate) return;
+          ws.send(JSON.stringify({ event: 'candidate', data: JSON.stringify(e.candidate) }));
         };
 
-        ws.onclose = function(evt) {
+        ws.onclose = function() {
           window.alert("WebSocket has closed");
         };
 
         ws.onmessage = function(evt) {
           let msg = JSON.parse(evt.data);
-          if (!msg) {
-            return console.log('failed to parse msg');
-          }
+          if (!msg) return console.log('Failed to parse msg');
 
           switch (msg.event) {
             case 'offer':
               let offer = JSON.parse(msg.data);
-              if (!offer) {
-                return console.log('failed to parse answer');
-              }
+              if (!offer) return console.log('Failed to parse offer');
               pc.setRemoteDescription(offer);
               pc.createAnswer().then(answer => {
                 pc.setLocalDescription(answer);
-                ws.send(JSON.stringify({event: 'answer', data: JSON.stringify(answer)}));
+                ws.send(JSON.stringify({ event: 'answer', data: JSON.stringify(answer) }));
               });
-              return;
+              break;
 
             case 'candidate':
               let candidate = JSON.parse(msg.data);
-              if (!candidate) {
-                return console.log('failed to parse candidate');
-              }
+              if (!candidate) return console.log('Failed to parse candidate');
               pc.addIceCandidate(candidate);
+              break;
           }
         };
 
         ws.onerror = function(evt) {
           console.log("ERROR: " + evt.data);
         };
-      }).catch(window.alert);
+      })
+      .catch(window.alert);
+
+      muteButton.addEventListener('click', function(event) {
+        if (audioTrack) {
+          audioTrack.enabled = !audioTrack.enabled;
+          muteIcon.className = audioTrack.enabled ? 'fa-solid fa-microphone' : 'fa-solid fa-microphone-slash';
+        }
+      });
+
+      cameraButton.addEventListener('click', function(event) {
+        if (videoTrack) {
+          videoTrack.enabled = !videoTrack.enabled;
+          cameraIcon.className = videoTrack.enabled ? 'fa-solid fa-video' : 'fa-solid fa-video-slash';
+        }
+      });
     </script>
   </body>
 </html>
