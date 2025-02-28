@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Echos</title>
+    <link rel="stylesheet" href="/static/src/min.css">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="relative flex flex-col w-full h-screen items-center gap-4 p-4 bg-[var(--bg-primary)]">
+    <video id="localVideo" class="absolute bottom-4 right-4 h-[132px] rounded-lg z-50 border border-[var(--accent)]" autoplay></video>
+    <div class="flex flex-col md:flex-row gap-6 items-center">
+      <div class="text-center">
+        <div id="remoteVideos" class="flex w-fit flex-wrap gap-4 justify-center"></div>
+      </div>
+    </div>
+
+    <script>
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        let pc = new RTCPeerConnection();
+        pc.ontrack = function (event) {
+          if (event.track.kind === 'audio') {
+            return;
+          }
+
+          let el = document.createElement(event.track.kind);
+          el.srcObject = event.streams[0];
+          el.autoplay = true;
+          el.classList.add("rounded-lg", "max-h-[200px]");
+          document.getElementById('remoteVideos').appendChild(el);
+
+          event.track.onmute = function(event) {
+            el.play();
+          };
+
+          event.streams[0].onremovetrack = ({track}) => {
+            if (el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
+          };
+        };
+
+        document.getElementById('localVideo').srcObject = stream;
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+        let ws = new WebSocket("{{.}}");
+        pc.onicecandidate = e => {
+          if (!e.candidate) {
+            return;
+          }
+          ws.send(JSON.stringify({event: 'candidate', data: JSON.stringify(e.candidate)}));
+        };
+
+        ws.onclose = function(evt) {
+          window.alert("WebSocket has closed");
+        };
+
+        ws.onmessage = function(evt) {
+          let msg = JSON.parse(evt.data);
+          if (!msg) {
+            return console.log('failed to parse msg');
+          }
+
+          switch (msg.event) {
+            case 'offer':
+              let offer = JSON.parse(msg.data);
+              if (!offer) {
+                return console.log('failed to parse answer');
+              }
+              pc.setRemoteDescription(offer);
+              pc.createAnswer().then(answer => {
+                pc.setLocalDescription(answer);
+                ws.send(JSON.stringify({event: 'answer', data: JSON.stringify(answer)}));
+              });
+              return;
+
+            case 'candidate':
+              let candidate = JSON.parse(msg.data);
+              if (!candidate) {
+                return console.log('failed to parse candidate');
+              }
+              pc.addIceCandidate(candidate);
+          }
+        };
+
+        ws.onerror = function(evt) {
+          console.log("ERROR: " + evt.data);
+        };
+      }).catch(window.alert);
+    </script>
+  </body>
+</html>

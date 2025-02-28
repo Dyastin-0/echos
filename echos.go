@@ -24,11 +24,14 @@ func Start(upgrader *websocket.Upgrader, auth authFunc) {
 
 	Rooms = make(map[string]*Room)
 
-	indexHTML, err := os.ReadFile("index.html")
+	indexHTML, err := os.ReadFile("static/src/index.html")
 	if err != nil {
 		panic(err)
 	}
 	indexTemplate = template.Must(template.New("").Parse(string(indexHTML)))
+
+	fs := http.FileServer(http.Dir("static/"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	http.HandleFunc("/websocket", websocketHandler(upgrader, auth))
 
@@ -42,7 +45,8 @@ func Start(upgrader *websocket.Upgrader, auth authFunc) {
 		}
 	})
 
+	log.Infof("Starting server on %s", *addr)
 	if err = http.ListenAndServe(*addr, nil); err != nil {
-		log.Errorf("Failed to start http server: %v", err)
+		log.Errorf("Failed to start HTTP server: %v", err)
 	}
 }
