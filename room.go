@@ -83,12 +83,8 @@ func (r *Room) SignalPeerConnections() {
 	r.listLock.Lock()
 	defer func() {
 		r.listLock.Unlock()
+		r.DeleteSelfIfEmpty()
 		r.DispatchKeyFrame()
-		if _, ok := Rooms[r.id]; len(r.peerConnections) == 0 && ok {
-			log.Errorf("room delete: %s", r.id)
-			delete(Rooms, r.id)
-			return
-		}
 	}()
 
 	attemptSync := func() (tryAgain bool) {
@@ -170,5 +166,16 @@ func (r *Room) SignalPeerConnections() {
 		if !attemptSync() {
 			break
 		}
+	}
+}
+
+func (r *Room) DeleteSelfIfEmpty() {
+	r.listLock.Lock()
+	defer r.listLock.Unlock()
+
+	if _, ok := Rooms[r.id]; len(r.peerConnections) == 0 && ok {
+		log.Infof("room delete: %s", r.id)
+		delete(Rooms, r.id)
+		return
 	}
 }
