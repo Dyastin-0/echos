@@ -31,7 +31,7 @@ build:
 		echo "$(APP): Failed to copy $(SERVICE_FILE). Check permissions or path."; \
 		exit 1; \
 	fi
-	@sudo cp -r $(STATIC_FILES) $(STATIC_FILES)
+	@sudo cp -r $(STATIC_FILES) $(STATIC_FILES_PATH)
 	@if [ $$? -eq 0 ]; then \
 		echo "$(APP): $(STATIC_FILES) successfully copied to $(STATIC_FILES_PATH)"; \
 	else \
