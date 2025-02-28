@@ -5,18 +5,22 @@ import (
 	"sync"
 	"time"
 
+	"slices"
+
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 )
 
 type Room struct {
+	id              string
 	listLock        sync.RWMutex
 	peerConnections []peerConnectionState
 	trackLocals     map[string]*webrtc.TrackLocalStaticRTP
 }
 
-func NewRoom() *Room {
+func NewRoom(id string) *Room {
 	room := Room{
+		id:          id,
 		listLock:    sync.RWMutex{},
 		trackLocals: map[string]*webrtc.TrackLocalStaticRTP{},
 	}
@@ -80,12 +84,17 @@ func (r *Room) SignalPeerConnections() {
 	defer func() {
 		r.listLock.Unlock()
 		r.DispatchKeyFrame()
+		if _, ok := Rooms[r.id]; len(r.peerConnections) == 0 && ok {
+			log.Errorf("room delete: %s", r.id)
+			delete(Rooms, r.id)
+			return
+		}
 	}()
 
 	attemptSync := func() (tryAgain bool) {
 		for i := range r.peerConnections {
 			if r.peerConnections[i].peerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
-				r.peerConnections = append(r.peerConnections[:i], r.peerConnections[i+1:]...)
+				r.peerConnections = slices.Delete(r.peerConnections, i, i+1)
 				return true
 			}
 

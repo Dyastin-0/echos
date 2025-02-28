@@ -68,7 +68,6 @@ func websocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerF
 		}
 
 		roomID := rq.URL.Query().Get("room")
-
 		if roomID == "" {
 			log.Errorf("Failed to upgrade HTTP to Websocket: ", fmt.Errorf("bad request"))
 			return
@@ -82,7 +81,7 @@ func websocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerF
 
 		r, ok := Rooms[roomID]
 		if !ok {
-			Rooms[roomID] = NewRoom()
+			Rooms[roomID] = NewRoom(roomID)
 			r = Rooms[roomID]
 		}
 
