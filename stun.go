@@ -7,7 +7,7 @@ import (
 	"github.com/pion/stun/v3"
 )
 
-func startListener(network, address string) {
+func startSTUNon(network, address string) {
 	conn, err := net.ListenPacket(network, address)
 	if err != nil {
 		panic(err)
@@ -52,6 +52,5 @@ func startListener(network, address string) {
 }
 
 func StartSTUN() {
-	go startListener("udp4", "0.0.0.0:3478") // IPv4
-	go startListener("udp6", "[::]:3478")    // IPv6
+	go startSTUNon("udp4", "0.0.0.0:3478")
 }
