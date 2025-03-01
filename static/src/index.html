@@ -155,6 +155,28 @@
           cameraIcon.className = videoTrack.enabled ? 'fa-solid fa-video' : 'fa-solid fa-video-slash';
         }
       });
+
+
+      //window
+      window.addEventListener('resize', () => {
+        const maxX = window.innerWidth - localVideo.clientWidth - 16;
+        const maxY = window.innerHeight - localVideo.clientHeight - 16;
+
+        let currentX = parseFloat(localVideo.style.left) || localVideo.getBoundingClientRect().left;
+        let currentY = parseFloat(localVideo.style.top) || localVideo.getBoundingClientRect().top;
+
+        const onEnd = (window.innerHeight - (currentY + localVideo.clientHeight) <= 20) ||
+           (window.innerWidth - (currentX + localVideo.clientWidth) <= 20);
+
+        if (onEnd) {
+          localVideo.style.left = `${maxX}px`;
+          localVideo.style.top = `${maxY}px`;
+        } else {
+          localVideo.style.left = `${Math.max(16, Math.min(currentX, maxX))}px`;
+          localVideo.style.top = `${Math.max(16, Math.min(currentY, maxY))}px`;
+        }
+      });
+
     </script>
   </body>
 </html>
