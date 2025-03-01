@@ -83,7 +83,7 @@ func (r *Room) SignalPeerConnections() {
 	r.listLock.Lock()
 	defer func() {
 		r.listLock.Unlock()
-		// r.DeleteSelfIfEmpty()
+		r.DeleteSelfIfEmpty()
 		r.DispatchKeyFrame()
 	}()
 
