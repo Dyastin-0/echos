@@ -10,7 +10,7 @@ import (
 func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
-			{URLs: []string{"stun:stun.l.google.com:19302"}},
+			{URLs: []string{"stun:" + *stunAddr}},
 		},
 	})
 	if err != nil {

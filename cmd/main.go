@@ -5,5 +5,6 @@ import (
 )
 
 func main() {
+	go echos.StartSTUN()
 	echos.Start(echos.UnsafeUpgrader(), echos.UnSafeAuth)
 }
