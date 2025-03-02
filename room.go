@@ -12,10 +12,10 @@ import (
 )
 
 type Room struct {
-	id              string
-	listLock        sync.RWMutex
-	peerConnections []peerConnectionState
-	trackLocals     map[string]*webrtc.TrackLocalStaticRTP
+	id          string
+	listLock    sync.RWMutex
+	peers       []*peer
+	trackLocals map[string]*webrtc.TrackLocalStaticRTP
 }
 
 func NewRoom(id string) *Room {
@@ -27,18 +27,18 @@ func NewRoom(id string) *Room {
 
 	go func() {
 		for range time.NewTicker(time.Second * 3).C {
-			room.DispatchKeyFrame()
+			room.dispatchKeyFrame()
 		}
 	}()
 
 	return &room
 }
 
-func (r *Room) AddTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
+func (r *Room) addTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
 	r.listLock.Lock()
 	defer func() {
 		r.listLock.Unlock()
-		r.SignalPeerConnections()
+		r.signalPeerConnections()
 	}()
 
 	trackLocal, err := webrtc.NewTrackLocalStaticRTP(t.Codec().RTPCodecCapability, t.ID(), t.StreamID())
@@ -50,27 +50,27 @@ func (r *Room) AddTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
 	return trackLocal
 }
 
-func (r *Room) RemoveTrack(t *webrtc.TrackLocalStaticRTP) {
+func (r *Room) removeTrack(t *webrtc.TrackLocalStaticRTP) {
 	r.listLock.Lock()
 	defer func() {
 		r.listLock.Unlock()
-		r.SignalPeerConnections()
+		r.signalPeerConnections()
 	}()
 
 	delete(r.trackLocals, t.ID())
 }
 
-func (r *Room) DispatchKeyFrame() {
+func (r *Room) dispatchKeyFrame() {
 	r.listLock.Lock()
 	defer r.listLock.Unlock()
 
-	for i := range r.peerConnections {
-		for _, receiver := range r.peerConnections[i].peerConnection.GetReceivers() {
+	for i := range r.peers {
+		for _, receiver := range r.peers[i].Connection.GetReceivers() {
 			if receiver.Track() == nil {
 				continue
 			}
 
-			_ = r.peerConnections[i].peerConnection.WriteRTCP([]rtcp.Packet{
+			_ = r.peers[i].Connection.WriteRTCP([]rtcp.Packet{
 				&rtcp.PictureLossIndication{
 					MediaSSRC: uint32(receiver.Track().SSRC()),
 				},
@@ -79,24 +79,24 @@ func (r *Room) DispatchKeyFrame() {
 	}
 }
 
-func (r *Room) SignalPeerConnections() {
+func (r *Room) signalPeerConnections() {
 	r.listLock.Lock()
 	defer func() {
 		r.listLock.Unlock()
-		r.DeleteSelfIfEmpty()
-		r.DispatchKeyFrame()
+		r.deleteSelfIfEmpty()
+		r.dispatchKeyFrame()
 	}()
 
 	attemptSync := func() (tryAgain bool) {
-		for i := range r.peerConnections {
-			if r.peerConnections[i].peerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
-				r.peerConnections = slices.Delete(r.peerConnections, i, i+1)
+		for i := range r.peers {
+			if r.peers[i].Connection.ConnectionState() == webrtc.PeerConnectionStateClosed {
+				r.peers = slices.Delete(r.peers, i, i+1)
 				return true
 			}
 
 			existingSenders := map[string]bool{}
 
-			for _, sender := range r.peerConnections[i].peerConnection.GetSenders() {
+			for _, sender := range r.peers[i].Connection.GetSenders() {
 				if sender.Track() == nil {
 					continue
 				}
@@ -104,13 +104,13 @@ func (r *Room) SignalPeerConnections() {
 				existingSenders[sender.Track().ID()] = true
 
 				if _, ok := r.trackLocals[sender.Track().ID()]; !ok {
-					if err := r.peerConnections[i].peerConnection.RemoveTrack(sender); err != nil {
+					if err := r.peers[i].Connection.RemoveTrack(sender); err != nil {
 						return true
 					}
 				}
 			}
 
-			for _, receiver := range r.peerConnections[i].peerConnection.GetReceivers() {
+			for _, receiver := range r.peers[i].Connection.GetReceivers() {
 				if receiver.Track() == nil {
 					continue
 				}
@@ -120,18 +120,18 @@ func (r *Room) SignalPeerConnections() {
 
 			for trackID := range r.trackLocals {
 				if _, ok := existingSenders[trackID]; !ok {
-					if _, err := r.peerConnections[i].peerConnection.AddTrack(r.trackLocals[trackID]); err != nil {
+					if _, err := r.peers[i].Connection.AddTrack(r.trackLocals[trackID]); err != nil {
 						return true
 					}
 				}
 			}
 
-			offer, err := r.peerConnections[i].peerConnection.CreateOffer(nil)
+			offer, err := r.peers[i].Connection.CreateOffer(nil)
 			if err != nil {
 				return true
 			}
 
-			if err = r.peerConnections[i].peerConnection.SetLocalDescription(offer); err != nil {
+			if err = r.peers[i].Connection.SetLocalDescription(offer); err != nil {
 				return true
 			}
 
@@ -143,7 +143,7 @@ func (r *Room) SignalPeerConnections() {
 
 			log.Infof("Send offer to client: %v", offer)
 
-			if err = r.peerConnections[i].websocket.WriteJSON(&websocketMessage{
+			if err = r.peers[i].websocket.WriteJSON(&websocketMessage{
 				Event: "offer",
 				Data:  string(offerString),
 			}); err != nil {
@@ -158,7 +158,7 @@ func (r *Room) SignalPeerConnections() {
 		if syncAttempt == 25 {
 			go func() {
 				time.Sleep(time.Second * 3)
-				r.SignalPeerConnections()
+				r.signalPeerConnections()
 			}()
 			return
 		}
@@ -169,11 +169,11 @@ func (r *Room) SignalPeerConnections() {
 	}
 }
 
-func (r *Room) DeleteSelfIfEmpty() {
+func (r *Room) deleteSelfIfEmpty() {
 	r.listLock.Lock()
 	defer r.listLock.Unlock()
 
-	if _, ok := Rooms[r.id]; len(r.peerConnections) == 0 && ok {
+	if _, ok := Rooms[r.id]; len(r.peers) == 0 && ok {
 		log.Infof("room delete: %s", r.id)
 		delete(Rooms, r.id)
 		return

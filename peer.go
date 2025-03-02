@@ -27,7 +27,7 @@ func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
 	}
 
 	r.listLock.Lock()
-	r.peerConnections = append(r.peerConnections, peerConnectionState{pc, ws})
+	r.peers = append(r.peers, &peer{pc, ws})
 	r.listLock.Unlock()
 
 	onICECandidate(pc, ws)
@@ -35,7 +35,7 @@ func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
 	onTrack(pc, r)
 	onICEConnectionStateChange(pc)
 
-	r.SignalPeerConnections()
+	r.signalPeerConnections()
 
 	return pc, nil
 }
@@ -73,7 +73,7 @@ func onConnectionStateChange(pc *webrtc.PeerConnection, r *Room) {
 				log.Errorf("Failed to close PeerConnection: %v", err)
 			}
 		case webrtc.PeerConnectionStateClosed:
-			r.SignalPeerConnections()
+			r.signalPeerConnections()
 		default:
 		}
 	})
@@ -83,8 +83,8 @@ func onTrack(pc *webrtc.PeerConnection, r *Room) {
 	pc.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		log.Infof("Got remote track: Kind=%s, ID=%s, PayloadType=%d", t.Kind(), t.ID(), t.PayloadType())
 
-		trackLocal := r.AddTrack(t)
-		defer r.RemoveTrack(trackLocal)
+		trackLocal := r.addTrack(t)
+		defer r.removeTrack(trackLocal)
 
 		buf := make([]byte, 1500)
 		rtpPkt := &rtp.Packet{}

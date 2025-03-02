@@ -15,9 +15,9 @@ type websocketMessage struct {
 	Data  string `json:"data"`
 }
 
-type peerConnectionState struct {
-	peerConnection *webrtc.PeerConnection
-	websocket      *threadSafeWriter
+type peer struct {
+	Connection *webrtc.PeerConnection
+	websocket  *threadSafeWriter
 }
 
 type threadSafeWriter struct {
