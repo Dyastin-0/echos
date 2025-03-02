@@ -12,8 +12,8 @@ import (
 func main() {
 	echos.StartSTUN() // if you want a dedicated STUN server
 
-    // pass a *websocket.Upgrader to handle CheckOrigin
-    // and func (r *http.Request) bool to handle auth 
+	// pass a *websocket.Upgrader to handle CheckOrigin
+	// and func (r *http.Request) bool to handle auth 
 	echos.Start(echos.UnsafeUpgrader(), echos.UnSafeAuth)
 }
 ```
@@ -25,7 +25,7 @@ func main() {
 ```
 
 ```
--stunAddr=your.domain:3478 -secure
+-stunAddr=stun.your.domain:3478 -domain=your.domain.com -secure
 ```
 
 ##### Build and Run
