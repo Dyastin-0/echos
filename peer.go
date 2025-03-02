@@ -7,7 +7,7 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
+func NewPeer(r *Room, ws *threadSafeWriter, id string) (*peer, error) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:" + *stunAddr}},
@@ -27,7 +27,12 @@ func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
 	}
 
 	r.listLock.Lock()
-	r.peers = append(r.peers, &peer{pc, ws})
+	peer := &peer{
+		connection: pc,
+		socket:     ws,
+		id:         id,
+	}
+	r.peers = append(r.peers, peer)
 	r.listLock.Unlock()
 
 	onICECandidate(pc, ws)
@@ -37,7 +42,7 @@ func NewPeer(r *Room, ws *threadSafeWriter) (*webrtc.PeerConnection, error) {
 
 	r.signalPeerConnections()
 
-	return pc, nil
+	return peer, nil
 }
 
 func onICECandidate(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
@@ -81,7 +86,7 @@ func onConnectionStateChange(pc *webrtc.PeerConnection, r *Room) {
 
 func onTrack(pc *webrtc.PeerConnection, r *Room) {
 	pc.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-		log.Infof("Got remote track: Kind=%s, ID=%s, PayloadType=%d", t.Kind(), t.ID(), t.PayloadType())
+		log.Errorf("Got remote track: Kind=%s, ID=%s, PayloadType=%d", t.Kind(), t.ID(), t.PayloadType())
 
 		trackLocal := r.addTrack(t)
 		defer r.removeTrack(trackLocal)

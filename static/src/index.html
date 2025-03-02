@@ -11,35 +11,54 @@
     />
     <script src="https://kit.fontawesome.com/65c673ed11.js" crossorigin="anonymous"></script>
   </head>
-  <body class="relative flex flex-col w-full h-screen items-center gap-4 p-4 bg-[var(--bg-primary)]">
+  <body class="relative justify-center flex w-full h-screen gap-4 p-4 bg-[var(--bg-secondary)] text-sm">
 
-    <div class="flex flex-col md:flex-row gap-6 items-center">
-      <div class="text-center">
-        <div id="remoteVideos" class="flex w-fit flex-wrap gap-4 justify-center"></div>
-      </div>
+    <video id="localVideo" class="absolute bottom-4 right-4 h-[100px] rounded-lg z-50 border border-[var(--accent)]" muted autoplay></video>
+    
+    <div class="flex flex-col md:flex-row w-full h-full p-4 gap-4">
+        <div id="remoteVideos" class="flex w-fit flex-wrap gap-4"></div>
     </div>
     
-    <video id="localVideo" class="absolute bottom-4 right-4 h-[100px] rounded-lg z-50 border border-[var(--accent)]" muted autoplay></video>
+    
     <div class="absolute bottom-4">
       <div class="flex gap-4">
-        <button id="muteButton" class="p-3 min-w-12 min-h-12 bg-[var(--bg-secondary)] rounded-full hover:bg-[var(--accent)]">
-          <i id="muteIcon" class="fa-solid fa-microphone"></i>
+        <button id="muteButton" class="flex items-center justify-center p-4 min-w-16 min-h-16 bg-[var(--bg-primary)] rounded-full hover:cursor-pointer hover:bg-[var(--accent)]">
+          <i id="muteIcon" class="fa-solid fa-microphone text-lg"></i>
         </button>
-        <button id="cameraButton" class="p-3 min-w-12 min-h-12 bg-[var(--bg-secondary)] rounded-full hover:bg-[var(--accent)]">
-          <i id="cameraIcon" class="fa-solid fa-video"></i>
+        <button id="cameraButton" class="flex items-center justify-center p-4 min-w-16 min-h-16 bg-[var(--bg-primary)] rounded-full hover:cursor-pointer hover:bg-[var(--accent)]">
+          <i id="cameraIcon" class="fa-solid fa-video text-lg"></i>
         </button>
+        <button id="chatButton" class="flex items-center justify-center p-4 min-w-16 min-h-16 bg-[var(--bg-primary)] rounded-full hover:cursor-pointer hover:bg-[var(--accent)]">
+          <i id="chatIcon" class="fa-solid fa-message text-lg"></i>
+        </button>
+        <button id="screenShareButton" class="flex items-center justify-center p-4 min-w-16 min-h-16 bg-[var(--bg-primary)] rounded-full hover:cursor-pointer hover:bg-[var(--accent)]">
+          <i id="screenShareIcon" class="fa-solid fa-desktop text-lg"></i>
+        </button>        
       </div>
     </div>
 
+    <section id="chatSection" style="display: none;" class="relative flex-col min-w-[300px] h-[500px] bg-[var(--bg-primary)] gap-4 p-4 rounded-md">
+      <h1 class="text-center">Chat</h1>
+      <div id="chatContainer" class="h-full flex flex-col gap-2 custom-scrollbar overflow-y-auto rounded-md">
+
+      </div>
+      <form id="chatForm">
+        <input id="chatInput" class="p-2 w-full outline-none rounded-md bg-[var(--bg-secondary)]" placeholder="Send a message" />
+      </form>
+    </section>
+    
     <script>
-      //local video controls
+      let pc = new RTCPeerConnection();
+      let ws = null;
+
+      // local video controls
       const muteButton = document.querySelector('#muteButton');
       const muteIcon = document.querySelector('#muteIcon');
       const cameraButton = document.querySelector('#cameraButton');
       const cameraIcon = document.querySelector('#cameraIcon');
       let audioTrack, videoTrack;
 
-      //local video
+      // local video
       const localVideo = document.getElementById('localVideo');
       let isDragging = false;
       let offsetX, offsetY;
@@ -78,19 +97,18 @@
       // stream
       navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
-        let pc = new RTCPeerConnection();
         document.getElementById('localVideo').srcObject = stream;
 
         audioTrack = stream.getAudioTracks()[0];
         videoTrack = stream.getVideoTracks()[0];
 
-        pc.ontrack = function (event) {
+        pc.ontrack = (event) => {
           if (event.track.kind === 'audio') return;
 
           let el = document.createElement(event.track.kind);
           el.srcObject = event.streams[0];
           el.autoplay = true;
-          el.classList.add("rounded-lg", "max-h-[400px]");
+          el.classList.add("rounded-lg", "max-h-[200px]");
           document.getElementById('remoteVideos').appendChild(el);
 
           event.streams[0].onremovetrack = ({track}) => {
@@ -102,19 +120,19 @@
 
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-        let ws = new WebSocket("{{.}}");
+        ws = new WebSocket("{{.}}");
 
         pc.onicecandidate = e => {
           if (!e.candidate) return;
           ws.send(JSON.stringify({ event: 'candidate', data: JSON.stringify(e.candidate) }));
         };
 
-        ws.onclose = function() {
+        ws.onclose = () => {
           window.alert("WebSocket has closed");
         };
 
-        ws.onmessage = function(evt) {
-          let msg = JSON.parse(evt.data);
+        ws.onmessage = (event) => {
+          let msg = JSON.parse(event.data);
           if (!msg) return console.log('Failed to parse msg');
 
           switch (msg.event) {
@@ -133,31 +151,140 @@
               if (!candidate) return console.log('Failed to parse candidate');
               pc.addIceCandidate(candidate);
               break;
+            case 'message':
+              const msgElement = document.createElement('div');
+              const msgcontent = document.createElement('p');
+              const msgId = document.createElement('p');
+              
+              msgcontent.textContent = msg.data;
+
+              msgId.textContent = msg.id;
+              msgId.classList.add("text-xs", "text-[var(--text-secondary)]");
+
+              msgElement.classList.add('pl-4', 'pr-4', 'pb-3', 'pt-3', 'bg-[var(--bg-secondary)]', 'rounded-full');
+              msgElement.appendChild(msgId);
+              msgElement.appendChild(msgcontent);
+              
+              
+              chatContainer.appendChild(msgElement);
           }
         };
 
-        ws.onerror = function(evt) {
-          console.log("ERROR: " + evt.data);
+        ws.onerror = (event) =>  {
+          console.log("ERROR: " + event.data);
         };
       })
       .catch(window.alert);
 
-      muteButton.addEventListener('click', function(event) {
+      muteButton.addEventListener('click', (event) =>  {
         if (audioTrack) {
           audioTrack.enabled = !audioTrack.enabled;
           muteIcon.className = audioTrack.enabled ? 'fa-solid fa-microphone' : 'fa-solid fa-microphone-slash';
         }
       });
 
-      cameraButton.addEventListener('click', function(event) {
+      cameraButton.addEventListener('click', (event) =>  {
         if (videoTrack) {
           videoTrack.enabled = !videoTrack.enabled;
           cameraIcon.className = videoTrack.enabled ? 'fa-solid fa-video' : 'fa-solid fa-video-slash';
         }
       });
 
+      // chat
+      const chatSection = document.getElementById('chatSection'); 
+      const chatForm = document.getElementById('chatForm');
+      const chatInput = document.getElementById('chatInput');
+      const chatContainer = document.getElementById('chatContainer');
 
-      //window
+      chatForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const message = chatInput.value.trim();
+        if (message === '') return;
+
+        ws.send(JSON.stringify({ event: 'message', data: message }));
+        chatInput.value = '';
+      });
+
+      // chat toggle
+      const chatButton = document.getElementById('chatButton')
+      const chatIcon = document.getElementById('chatIcon')
+
+      chatButton.addEventListener('click', () => {
+        if (chatSection.style.display === 'none') {
+          chatSection.style.display = 'flex';
+          chatButton.classList.add("text-[var(--highlight)]");
+        } else {
+          chatSection.style.display = 'none';
+          chatButton.classList.remove("text-[var(--highlight)]");
+        }
+      });
+
+      // screen stream
+      const screenShareButton = document.getElementById('screenShareButton');
+      const screenShareIcon = document.getElementById('screenShareIcon');
+
+      let isScreenSharing = false;
+      let screenStream = null;
+
+      screenShareButton.addEventListener('click', async () => {
+        if (!isScreenSharing) {
+          try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            screenStream.getTracks().forEach(track => {
+              pc.addTrack(track, screenStream)
+            });
+
+            screenStream.getVideoTracks()[0].onended = () => {
+              stopScreenSharing();
+              document.body.removeChild(screenVideo);
+            };
+
+            renegotiateConnection();
+
+            isScreenSharing = true;
+            screenShareIcon.className = "fa-solid fa-stop";
+            screenShareButton.classList.add("text-[var(--red)]");
+          } catch (error) {
+            console.error("Error starting screen share:", error);
+          }
+        } else {
+          stopScreenSharing();
+        }
+      });
+
+      function stopScreenSharing() {
+        if (screenStream) {
+          screenStream.getTracks().forEach(track => {
+            track.stop();
+            const sender = pc.getSenders().find(s => s.track === track);
+            if (sender) {
+              pc.removeTrack(sender);
+            }
+            strea
+          });
+
+          screenStream = null;
+        }
+
+        isScreenSharing = false;
+        screenShareIcon.className = 'fa-solid fa-desktop';
+        screenShareButton.classList.remove("text-[var(--highlight)]");
+
+        renegotiateConnection();
+      }
+
+      // helpers
+      async function renegotiateConnection() {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          ws.send(JSON.stringify({ event: 'renegotiate', data: JSON.stringify(offer) }));
+        } catch (error) {
+            console.error("Renegotiation failed:", error);
+        }
+      }
+
+      // window
       window.addEventListener('resize', () => {
         const maxX = window.innerWidth - localVideo.clientWidth - 16;
         const maxY = window.innerHeight - localVideo.clientHeight - 16;
@@ -165,7 +292,6 @@
         localVideo.style.left = `${maxX}px`;
         localVideo.style.top = `${maxY}px`;
       });
-
     </script>
   </body>
 </html>

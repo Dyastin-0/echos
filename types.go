@@ -11,13 +11,15 @@ import (
 type authFunc func(r *http.Request) bool
 
 type websocketMessage struct {
+	ID    string `json:"id"`
 	Event string `json:"event"`
 	Data  string `json:"data"`
 }
 
 type peer struct {
-	Connection *webrtc.PeerConnection
-	websocket  *threadSafeWriter
+	id         string
+	connection *webrtc.PeerConnection
+	socket     *threadSafeWriter
 }
 
 type threadSafeWriter struct {
