@@ -4,7 +4,6 @@ import (
 	"flag"
 	"net/http"
 	"os"
-	"strings"
 	"text/template"
 
 	"github.com/gorilla/websocket"
@@ -14,6 +13,7 @@ import (
 var (
 	addr          = flag.String("addr", ":8080", "http service address")
 	stunAddr      = flag.String("stunAddr", "stun.l.google.com:19302", "stun server address")
+	domain        = flag.String("domain", "localhost:8080", "http service domain")
 	secure        = flag.Bool("secure", false, "ws secure")
 	indexTemplate = &template.Template{}
 	Rooms         map[string]*Room
@@ -41,8 +41,7 @@ func Start(upgrader *websocket.Upgrader, auth authFunc) {
 		if *secure {
 			protocol = "wss"
 		}
-		domain := strings.Split(*stunAddr, ":")
-		if err = indexTemplate.Execute(w, protocol+"://"+domain[0]+"/websocket?"+r.URL.RawQuery); err != nil {
+		if err = indexTemplate.Execute(w, protocol+"://"+*domain+"/websocket?"+r.URL.RawQuery); err != nil {
 			log.Errorf("Failed to parse index template: %v", err)
 		}
 	})
