@@ -25,7 +25,7 @@ func main() {
 ```
 
 ```
--stunAddr=your.domain:3478 -secure
+-stunAddr=stun.your.domain:3478 -domain=your.domain.com -secure
 ```
 
 ##### Build and Run
