@@ -12,8 +12,8 @@ import (
 func main() {
 	echos.StartSTUN() // if you want a dedicated STUN server
 
-    // pass a *websocket.Upgrader to handle CheckOrigin
-    // and func (r *http.Request) bool to handle auth 
+	// pass a *websocket.Upgrader to handle CheckOrigin
+	// and func (r *http.Request) bool to handle auth 
 	echos.Start(echos.UnsafeUpgrader(), echos.UnSafeAuth)
 }
 ```
