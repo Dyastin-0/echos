@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=ubuntu
 WorkingDirectory=/opt/echos
-ExecStart=/opt/echos/echos -addr=:42069 -stunAddr=stun.echos.dyastin.tech:3478 -domain=echos.dyastin.tech -secure
+ExecStart=/opt/echos/echos -addr=:42069 -stunAddr=stun.echos.dyastin.tech:3478
 Restart=always
 StandardOutput=journal
 StandardError=journal
