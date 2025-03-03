@@ -229,7 +229,7 @@
       screenShareButton.addEventListener('click', async () => {
         if (!isScreenSharing) {
           try {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             screenStream.getTracks().forEach(track => {
               pc.addTrack(track, screenStream)
             });
@@ -252,6 +252,7 @@
         }
       });
 
+      // helpers
       function stopScreenSharing() {
         if (screenStream) {
           screenStream.getTracks().forEach(track => {
@@ -272,7 +273,6 @@
         renegotiateConnection();
       }
 
-      // helpers
       async function renegotiateConnection() {
         try {
           const offer = await pc.createOffer();
