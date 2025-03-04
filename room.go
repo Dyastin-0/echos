@@ -173,8 +173,10 @@ func (r *Room) deleteSelfIfEmpty() {
 	r.listLock.Lock()
 	defer r.listLock.Unlock()
 
+	log.Errorf("len: %d", len(r.peers))
+
 	if _, ok := Rooms[r.id]; len(r.peers) == 0 && ok {
-		log.Infof("room delete: %s", r.id)
+		log.Errorf("room delete: %s", r.id)
 		delete(Rooms, r.id)
 		return
 	}
@@ -246,18 +248,6 @@ func (r *Room) wsListen(peer *peer) {
 				log.Infof("Error setting local description:", err)
 				return
 			}
-
-			answerBytes, err := json.Marshal(answer)
-			if err != nil {
-				log.Errorf("Failed to marshal offer to json: %v", err)
-				return
-			}
-
-			response := &websocketMessage{
-				Event: "renegotiate",
-				Data:  string(answerBytes),
-			}
-			peer.socket.WriteJSON(response)
 
 			r.signalPeerConnections()
 		case "message":
