@@ -8,7 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func websocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerFunc {
+func WebsocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, rq *http.Request) {
 		if !auth(rq) {
 			log.Errorf("Failed to upgrade HTTP to Websocket: ", fmt.Errorf("unauthorized"))

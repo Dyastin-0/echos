@@ -26,9 +26,9 @@ func Start(upgrader *websocket.Upgrader, auth authFunc) {
 
 	router.Use(cors)
 
-	router.Post("/create", createRoom)
-	router.Post("/check", checkRoom)
-	router.Handle("/websocket", websocketHandler(upgrader, auth))
+	router.Post("/create", CreateRoom)
+	router.Post("/check", CheckRoom)
+	router.Handle("/websocket", WebsocketHandler(upgrader, auth))
 
 	log.Infof("Starting server on %s", *addr)
 	if err := http.ListenAndServe(*addr, router); err != nil {

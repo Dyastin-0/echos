@@ -35,7 +35,7 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
-func createRoom(w http.ResponseWriter, r *http.Request) {
+func CreateRoom(w http.ResponseWriter, r *http.Request) {
 	room := r.URL.Query().Get("room")
 
 	if room == "" {
@@ -69,7 +69,7 @@ func createRoom(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func checkRoom(w http.ResponseWriter, r *http.Request) {
+func CheckRoom(w http.ResponseWriter, r *http.Request) {
 	room := r.URL.Query().Get("room")
 
 	if room == "" {
