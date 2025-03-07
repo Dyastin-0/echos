@@ -27,19 +27,22 @@ func websocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerF
 			peerID = "Anonymous"
 		}
 
-		unsafeConn, err := upgrader.Upgrade(w, rq, nil)
+		roomsMutex.Lock()
+		r, ok := Rooms[roomID]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			roomsMutex.Unlock()
+			return
+		}
+		roomsMutex.Unlock()
+
+		conn, err := upgrader.Upgrade(w, rq, nil)
 		if err != nil {
 			log.Errorf("Failed to upgrade HTTP to Websocket: ", err)
 			return
 		}
 
-		r, ok := Rooms[roomID]
-		if !ok {
-			Rooms[roomID] = NewRoom(roomID)
-			r = Rooms[roomID]
-		}
-
-		ws := &threadSafeWriter{unsafeConn, sync.Mutex{}}
+		ws := &threadSafeWriter{conn, sync.Mutex{}}
 
 		defer ws.Close()
 

@@ -11,9 +11,11 @@ import (
 type authFunc func(r *http.Request) bool
 
 type websocketMessage struct {
-	ID    string `json:"id"`
-	Event string `json:"event"`
-	Data  string `json:"data"`
+	Name  string `json:"name,omitempty"`
+	ID    string `json:"id,omitempty"`
+	Event string `json:"event,omitempty"`
+	Data  string `json:"data,omitempty"`
+	Type  string `json:"type,omitempty"`
 }
 
 type peer struct {

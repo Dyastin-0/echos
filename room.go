@@ -175,6 +175,9 @@ func (r *Room) deleteSelfIfEmpty() {
 
 	log.Errorf("len: %d", len(r.peers))
 
+	roomsMutex.Lock()
+	defer roomsMutex.Unlock()
+
 	if _, ok := Rooms[r.id]; len(r.peers) == 0 && ok {
 		log.Errorf("room delete: %s", r.id)
 		delete(Rooms, r.id)

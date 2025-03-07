@@ -3,6 +3,7 @@ module github.com/Dyastin-0/echos
 go 1.24.0
 
 require (
+	github.com/go-chi/chi/v5 v5.2.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/pion/logging v0.2.3
 	github.com/pion/rtcp v1.2.15
