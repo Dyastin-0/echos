@@ -7,7 +7,13 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func NewPeer(r *Room, ws *threadSafeWriter, id string) (*peer, error) {
+type peer struct {
+	id         string
+	connection *webrtc.PeerConnection
+	socket     *ThreadSafeSocketWriter
+}
+
+func NewPeer(r *Room, ws *ThreadSafeSocketWriter, id string) (*peer, error) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:" + *stunAddr}},
@@ -35,18 +41,22 @@ func NewPeer(r *Room, ws *threadSafeWriter, id string) (*peer, error) {
 	r.peers = append(r.peers, peer)
 	r.listLock.Unlock()
 
-	onICECandidate(pc, ws)
-	onConnectionStateChange(pc, r)
-	onTrack(pc, r)
-	onICEConnectionStateChange(pc)
+	peer.start(r)
 
 	r.signalPeerConnections()
 
 	return peer, nil
 }
 
-func onICECandidate(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
-	pc.OnICECandidate(func(i *webrtc.ICECandidate) {
+func (p *peer) start(r *Room) {
+	p.onICECandidate()
+	p.onConnectionStateChange(r)
+	p.onTrack(r)
+	p.onICEConnectionStateChange()
+}
+
+func (p *peer) onICECandidate() {
+	p.connection.OnICECandidate(func(i *webrtc.ICECandidate) {
 		if i == nil {
 			return
 		}
@@ -59,7 +69,7 @@ func onICECandidate(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 
 		log.Infof("Send candidate to client: %s", candidateString)
 
-		if writeErr := ws.WriteJSON(&websocketMessage{
+		if writeErr := p.socket.WriteJSON(&websocketMessage{
 			Event: "candidate",
 			Data:  string(candidateString),
 		}); writeErr != nil {
@@ -68,13 +78,13 @@ func onICECandidate(pc *webrtc.PeerConnection, ws *threadSafeWriter) {
 	})
 }
 
-func onConnectionStateChange(pc *webrtc.PeerConnection, r *Room) {
-	pc.OnConnectionStateChange(func(p webrtc.PeerConnectionState) {
+func (p *peer) onConnectionStateChange(r *Room) {
+	p.connection.OnConnectionStateChange(func(pcs webrtc.PeerConnectionState) {
 		log.Infof("Connection state change: %s", p)
 
-		switch p {
+		switch pcs {
 		case webrtc.PeerConnectionStateFailed:
-			if err := pc.Close(); err != nil {
+			if err := p.connection.Close(); err != nil {
 				log.Errorf("Failed to close PeerConnection: %v", err)
 			}
 		case webrtc.PeerConnectionStateClosed:
@@ -84,8 +94,8 @@ func onConnectionStateChange(pc *webrtc.PeerConnection, r *Room) {
 	})
 }
 
-func onTrack(pc *webrtc.PeerConnection, r *Room) {
-	pc.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+func (p *peer) onTrack(r *Room) {
+	p.connection.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		log.Errorf("Got remote track: Kind=%s, ID=%s, PayloadType=%d", t.Kind(), t.ID(), t.PayloadType())
 
 		trackLocal := r.addTrack(t)
@@ -115,8 +125,8 @@ func onTrack(pc *webrtc.PeerConnection, r *Room) {
 	})
 }
 
-func onICEConnectionStateChange(pc *webrtc.PeerConnection) {
-	pc.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
+func (p *peer) onICEConnectionStateChange() {
+	p.connection.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
 		log.Infof("ICE connection state changed: %s", is)
 	})
 }

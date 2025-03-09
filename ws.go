@@ -3,7 +3,6 @@ package echos
 import (
 	"fmt"
 	"net/http"
-	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -42,7 +41,7 @@ func WebsocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerF
 			return
 		}
 
-		ws := &threadSafeWriter{conn, sync.Mutex{}}
+		ws := NewThreadSafeSocketWriter(conn)
 
 		defer ws.Close()
 
