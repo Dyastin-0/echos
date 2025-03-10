@@ -15,5 +15,5 @@ type websocketMessage struct {
 	State      bool   `json:"state"`
 	Target     string `json:"target,omitempty"`
 	AudioState bool   `json:"audioState"`
-	VideoState bool   `json:"VideoState"`
+	VideoState bool   `json:"videoState"`
 }
