@@ -10,7 +10,7 @@ import (
 
 type Message struct {
 	Value interface{}
-	ErrCh chan error
+  ErrCh chan error
 }
 
 type ThreadSafeSocketWriter struct {
@@ -47,14 +47,6 @@ func (t *ThreadSafeSocketWriter) WriteJSON(v interface{}) error {
 		return err
 	case <-t.closeCh:
 		return websocket.ErrCloseSent
-	}
-}
-
-func (t *ThreadSafeSocketWriter) WriteJSONAsync(v interface{}) {
-	select {
-	case t.msgCh <- Message{Value: v}:
-	case <-t.closeCh:
-	default:
 	}
 }
 
