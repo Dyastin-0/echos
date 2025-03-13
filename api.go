@@ -3,6 +3,7 @@ package echos
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 )
 
 type HTTPresponse map[string]string
@@ -11,13 +12,7 @@ func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 
-		allowed := false
-		for _, allowedOrigin := range allowedOrigins {
-			if origin == allowedOrigin {
-				allowed = true
-				break
-			}
-		}
+		allowed := slices.Contains(allowedOrigins, origin)
 
 		if allowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
