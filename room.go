@@ -191,6 +191,12 @@ func (r *Room) wsListen(peer *peer) {
 		_, raw, err := peer.socket.ReadMessage()
 		if err != nil {
 			log.Errorf("Failed to read message: %v", err)
+
+			r.propagateMessage(&websocketMessage{
+				Event:  "message",
+				Type:   "disconnect",
+				Target: peer.id,
+			})
 			return
 		}
 
