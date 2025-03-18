@@ -2,10 +2,9 @@ package echos
 
 import (
 	"encoding/json"
+	"slices"
 	"sync"
 	"time"
-
-	"slices"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
@@ -186,9 +185,9 @@ func (r *Room) deleteSelfIfEmpty() {
 }
 
 func (r *Room) wsListen(peer *peer) {
-	message := &websocketMessage{}
-
 	for {
+		message := &websocketMessage{}
+
 		_, raw, err := peer.socket.ReadMessage()
 		if err != nil {
 			log.Errorf("Failed to read message: %v", err)
