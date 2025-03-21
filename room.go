@@ -273,7 +273,11 @@ func (r *Room) propagateMessage(message *websocketMessage) {
 	defer r.listLock.Unlock()
 
 	for _, peer := range r.peers {
-		if err := peer.socket.Conn.WriteJSON(message); err != nil {
+		if peer.id == message.ID {
+			continue
+		}
+
+		if err := peer.socket.WriteJSON(message); err != nil {
 			log.Errorf("failed to propagate message: %+v", err)
 		}
 	}

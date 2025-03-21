@@ -31,15 +31,9 @@ func cors(next http.Handler) http.Handler {
 }
 
 func CreateRoom(w http.ResponseWriter, r *http.Request) {
-	room := r.URL.Query().Get("room")
-
-	if room == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(HTTPresponse{
-			"error": "Room name is required",
-		})
-		return
+	room, err := GenerateMeetRoomID(3, 3)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	roomsMutex.Lock()
