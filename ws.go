@@ -1,6 +1,7 @@
 package echos
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -23,7 +24,18 @@ func WebsocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerF
 
 		peerID := rq.URL.Query().Get("id")
 		if peerID == "" {
-			peerID = "Anonymous"
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(HTTPresponse{
+				"error": "ID missing",
+			})
+		}
+
+		peerName := rq.URL.Query().Get("name")
+		if peerName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(HTTPresponse{
+				"error": "Name missing",
+			})
 		}
 
 		roomsMutex.Lock()
@@ -45,7 +57,7 @@ func WebsocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerF
 
 		defer ws.Close()
 
-		peer, err := NewPeer(r, ws, peerID)
+		peer, err := NewPeer(r, ws, peerID, peerName)
 		if err != nil {
 			log.Errorf("Failed to creates a PeerConnection: %v", err)
 			return

@@ -9,11 +9,12 @@ import (
 
 type peer struct {
 	id         string
+	name       string
 	connection *webrtc.PeerConnection
 	socket     *ThreadSafeSocketWriter
 }
 
-func NewPeer(r *Room, ws *ThreadSafeSocketWriter, id string) (*peer, error) {
+func NewPeer(r *Room, ws *ThreadSafeSocketWriter, id, name string) (*peer, error) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:" + *stunAddr}},
@@ -37,6 +38,7 @@ func NewPeer(r *Room, ws *ThreadSafeSocketWriter, id string) (*peer, error) {
 		connection: pc,
 		socket:     ws,
 		id:         id,
+		name:       name,
 	}
 	r.peers = append(r.peers, peer)
 	r.listLock.Unlock()

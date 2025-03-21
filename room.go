@@ -260,6 +260,7 @@ func (r *Room) wsListen(peer *peer) {
 			r.signalPeerConnections()
 		case "message":
 			message.ID = peer.id
+			message.Name = peer.name
 			r.propagateMessage(message)
 		default:
 			log.Errorf("unknown message: %+v", message)
