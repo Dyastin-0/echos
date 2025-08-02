@@ -8,7 +8,7 @@ import (
 
 type HTTPresponse map[string]string
 
-func cors(next http.Handler) http.Handler {
+func (e *Echos) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 
@@ -30,56 +30,52 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
-func CreateRoom(w http.ResponseWriter, r *http.Request) {
-	room, err := GenerateMeetRoomID(3, 3)
+func (e *Echos) CreateRoom(w http.ResponseWriter, r *http.Request) {
+	roomID, err := GenerateMeetRoomID(3, 3)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
-	roomsMutex.Lock()
-	defer roomsMutex.Unlock()
-
-	if _, ok := Rooms[room]; ok {
+	// TODO: hande room id collisions
+	if _, ok := e.Rooms.Load(roomID); ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(HTTPresponse{
-			"error": "Room already exists",
+			"error": "failed to create a room, try again",
 		})
 		return
 	}
 
-	Rooms[room] = NewRoom(room)
+	e.Rooms.Store(roomID, NewRoom(roomID))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(HTTPresponse{
-		"message": "Room created successfully",
-		"room":    room,
+		"message": "room created successfully",
+		"room":    roomID,
 	})
 }
 
-func CheckRoom(w http.ResponseWriter, r *http.Request) {
-	room := r.URL.Query().Get("room")
+func (e *Echos) CheckRoom(w http.ResponseWriter, r *http.Request) {
+	roomID := r.URL.Query().Get("room")
 
-	if room == "" {
+	if roomID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(HTTPresponse{
-			"error": "Room name is required",
+			"error": "missing room id",
 		})
 		return
 	}
 
-	roomsMutex.RLock()
-	_, exists := Rooms[room]
-	roomsMutex.RUnlock()
+	_, exists := e.Rooms.Load(roomID)
 
 	if exists {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(HTTPresponse{
-			"message": "Room exists",
-			"room":    room,
+			"message": "room exists",
+			"room":    roomID,
 		})
 		return
 	}
@@ -87,6 +83,6 @@ func CheckRoom(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(HTTPresponse{
-		"error": "Room not found",
+		"error": "room not found",
 	})
 }

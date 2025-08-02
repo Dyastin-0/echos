@@ -2,6 +2,8 @@ package echos
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
@@ -14,37 +16,35 @@ type peer struct {
 	socket     *ThreadSafeSocketWriter
 }
 
-func NewPeer(r *Room, ws *ThreadSafeSocketWriter, id, name string) (*peer, error) {
+var RTPCodecTypes = []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio}
+
+func NewPeer(r *Room, ws *ThreadSafeSocketWriter, id, name, stunAddr string) (*peer, error) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
-			{URLs: []string{"stun:" + *stunAddr}},
+			{URLs: []string{"stun:" + stunAddr}},
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, typ := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio} {
+	for _, typ := range RTPCodecTypes {
 		if _, err := pc.AddTransceiverFromKind(typ, webrtc.RTPTransceiverInit{
 			Direction: webrtc.RTPTransceiverDirectionRecvonly,
 		}); err != nil {
-			log.Errorf("Failed to add transceiver: %v", err)
 			return nil, err
 		}
 	}
 
-	r.listLock.Lock()
 	peer := &peer{
 		connection: pc,
 		socket:     ws,
 		id:         id,
 		name:       name,
 	}
-	r.peers = append(r.peers, peer)
-	r.listLock.Unlock()
+	r.peers.Store(peer.id, peer)
 
 	peer.start(r)
-
 	r.signalPeerConnections()
 
 	return peer, nil
@@ -63,31 +63,30 @@ func (p *peer) onICECandidate() {
 			return
 		}
 
-		candidateString, err := json.Marshal(i.ToJSON())
+		candidateBytes, err := json.Marshal(i.ToJSON())
 		if err != nil {
-			log.Errorf("Failed to marshal candidate to json: %v", err)
+			log.Printf("failed to Marshal canditate: %v\n", err)
 			return
 		}
 
-		log.Infof("Send candidate to client: %s", candidateString)
-
-		if writeErr := p.socket.WriteJSON(&websocketMessage{
-			Event: "candidate",
-			Data:  string(candidateString),
-		}); writeErr != nil {
-			log.Errorf("Failed to write JSON: %v", writeErr)
+		err = p.socket.WriteJSON(
+			&websocketMessage{
+				Event: "candidate",
+				Data:  string(candidateBytes),
+			},
+		)
+		if err != nil {
+			log.Printf("failed to write candidate message: %v\n", err)
 		}
 	})
 }
 
 func (p *peer) onConnectionStateChange(r *Room) {
 	p.connection.OnConnectionStateChange(func(pcs webrtc.PeerConnectionState) {
-		log.Infof("Connection state change: %s", p)
-
 		switch pcs {
 		case webrtc.PeerConnectionStateFailed:
 			if err := p.connection.Close(); err != nil {
-				log.Errorf("Failed to close PeerConnection: %v", err)
+				log.Printf("failed to close peer connection: %v\n", err)
 			}
 		case webrtc.PeerConnectionStateClosed:
 			r.signalPeerConnections()
@@ -98,7 +97,12 @@ func (p *peer) onConnectionStateChange(r *Room) {
 
 func (p *peer) onTrack(r *Room) {
 	p.connection.OnTrack(func(t *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-		log.Errorf("Got remote track: Kind=%s, ID=%s, PayloadType=%d", t.Kind(), t.ID(), t.PayloadType())
+		fmt.Printf(
+			"got remote track: kind=%s, id=%s, payloadType=%d\n",
+			t.Kind(),
+			t.ID(),
+			t.PayloadType(),
+		)
 
 		trackLocal := r.addTrack(t)
 		defer r.removeTrack(trackLocal)
@@ -109,11 +113,12 @@ func (p *peer) onTrack(r *Room) {
 		for {
 			i, _, err := t.Read(buf)
 			if err != nil {
+				log.Println("failed to read remote track")
 				return
 			}
 
 			if err = rtpPkt.Unmarshal(buf[:i]); err != nil {
-				log.Errorf("Failed to unmarshal incoming RTP packet: %v", err)
+				log.Printf("failed to unmarshal incoming rtp packet: %v\n", err)
 				return
 			}
 
@@ -129,6 +134,6 @@ func (p *peer) onTrack(r *Room) {
 
 func (p *peer) onICEConnectionStateChange() {
 	p.connection.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
-		log.Infof("ICE connection state changed: %s", is)
+		log.Printf("ice connection state changed for %s: %s\n", p.id, is)
 	})
 }

@@ -2,7 +2,8 @@ package echos
 
 import (
 	"encoding/json"
-	"slices"
+	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -12,16 +13,13 @@ import (
 
 type Room struct {
 	id          string
-	listLock    sync.RWMutex
-	peers       []*peer
-	trackLocals map[string]*webrtc.TrackLocalStaticRTP
+	peers       sync.Map
+	trackLocals sync.Map
 }
 
 func NewRoom(id string) *Room {
 	room := Room{
-		id:          id,
-		listLock:    sync.RWMutex{},
-		trackLocals: map[string]*webrtc.TrackLocalStaticRTP{},
+		id: id,
 	}
 
 	go func() {
@@ -34,82 +32,68 @@ func NewRoom(id string) *Room {
 }
 
 func (r *Room) addTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
-	r.listLock.Lock()
-	defer func() {
-		r.listLock.Unlock()
-		r.signalPeerConnections()
-	}()
+	defer r.signalPeerConnections()
 
 	trackLocal, err := webrtc.NewTrackLocalStaticRTP(t.Codec().RTPCodecCapability, t.ID(), t.StreamID())
 	if err != nil {
 		panic(err)
 	}
 
-	r.trackLocals[t.ID()] = trackLocal
+	r.trackLocals.Store(t.ID(), trackLocal)
 	return trackLocal
 }
 
 func (r *Room) removeTrack(t *webrtc.TrackLocalStaticRTP) {
-	r.listLock.Lock()
-	defer func() {
-		r.listLock.Unlock()
-		r.signalPeerConnections()
-	}()
+	defer r.signalPeerConnections()
 
-	delete(r.trackLocals, t.ID())
+	r.trackLocals.Delete(t.ID())
 }
 
 func (r *Room) dispatchKeyFrame() {
-	r.listLock.Lock()
-	defer r.listLock.Unlock()
-
-	for i := range r.peers {
-		for _, receiver := range r.peers[i].connection.GetReceivers() {
+	r.peers.Range(func(id, p any) bool {
+		for _, receiver := range p.(*peer).connection.GetReceivers() {
 			if receiver.Track() == nil {
 				continue
 			}
 
-			_ = r.peers[i].connection.WriteRTCP([]rtcp.Packet{
+			_ = p.(*peer).connection.WriteRTCP([]rtcp.Packet{
 				&rtcp.PictureLossIndication{
 					MediaSSRC: uint32(receiver.Track().SSRC()),
 				},
 			})
 		}
-	}
+
+		return true
+	})
 }
 
 func (r *Room) signalPeerConnections() {
-	r.listLock.Lock()
-	defer func() {
-		r.listLock.Unlock()
-		r.deleteSelfIfEmpty()
-		r.dispatchKeyFrame()
-	}()
+	defer r.dispatchKeyFrame()
 
 	attemptSync := func() (tryAgain bool) {
-		for i := range r.peers {
-			if r.peers[i].connection.ConnectionState() == webrtc.PeerConnectionStateClosed {
-				r.peers = slices.Delete(r.peers, i, i+1)
+		r.peers.Range(func(id, p any) bool {
+			if p.(*peer).connection.ConnectionState() == webrtc.PeerConnectionStateClosed {
+				r.peers.Delete(id)
 				return true
 			}
 
 			existingSenders := map[string]bool{}
 
-			for _, sender := range r.peers[i].connection.GetSenders() {
+			for _, sender := range p.(*peer).connection.GetSenders() {
 				if sender.Track() == nil {
 					continue
 				}
 
 				existingSenders[sender.Track().ID()] = true
 
-				if _, ok := r.trackLocals[sender.Track().ID()]; !ok {
-					if err := r.peers[i].connection.RemoveTrack(sender); err != nil {
+				if _, ok := r.trackLocals.Load(sender.Track().ID()); !ok {
+					if err := p.(*peer).connection.RemoveTrack(sender); err != nil {
 						return true
 					}
 				}
 			}
 
-			for _, receiver := range r.peers[i].connection.GetReceivers() {
+			for _, receiver := range p.(*peer).connection.GetReceivers() {
 				if receiver.Track() == nil {
 					continue
 				}
@@ -117,38 +101,44 @@ func (r *Room) signalPeerConnections() {
 				existingSenders[receiver.Track().ID()] = true
 			}
 
-			for trackID := range r.trackLocals {
-				if _, ok := existingSenders[trackID]; !ok {
-					if _, err := r.peers[i].connection.AddTrack(r.trackLocals[trackID]); err != nil {
+			r.trackLocals.Range(func(key, t any) bool {
+				if _, ok := existingSenders[key.(string)]; !ok {
+					track, ok := r.trackLocals.Load(key)
+					if !ok {
+						return true
+					}
+
+					if _, err := p.(*peer).connection.AddTrack(track.(webrtc.TrackLocal)); err != nil {
 						return true
 					}
 				}
-			}
 
-			offer, err := r.peers[i].connection.CreateOffer(nil)
+				return true
+			})
+
+			offer, err := p.(*peer).connection.CreateOffer(nil)
 			if err != nil {
 				return true
 			}
 
-			if err = r.peers[i].connection.SetLocalDescription(offer); err != nil {
+			if err = p.(*peer).connection.SetLocalDescription(offer); err != nil {
 				return true
 			}
 
 			offerBytes, err := json.Marshal(offer)
 			if err != nil {
-				log.Errorf("Failed to marshal offer to json: %v", err)
 				return true
 			}
 
-			log.Infof("Send offer to client: %v", offer)
-
-			if err = r.peers[i].socket.WriteJSON(&websocketMessage{
+			if err = p.(*peer).socket.WriteJSON(&websocketMessage{
 				Event: "offer",
 				Data:  string(offerBytes),
 			}); err != nil {
 				return true
 			}
-		}
+
+			return true
+		})
 
 		return
 	}
@@ -156,7 +146,7 @@ func (r *Room) signalPeerConnections() {
 	for syncAttempt := 0; ; syncAttempt++ {
 		if syncAttempt == 25 {
 			go func() {
-				time.Sleep(time.Second * 1)
+				time.Sleep(200 * time.Millisecond)
 				r.signalPeerConnections()
 			}()
 			return
@@ -168,30 +158,13 @@ func (r *Room) signalPeerConnections() {
 	}
 }
 
-func (r *Room) deleteSelfIfEmpty() {
-	r.listLock.Lock()
-	defer r.listLock.Unlock()
-
-	log.Errorf("len: %d", len(r.peers))
-
-	roomsMutex.Lock()
-	defer roomsMutex.Unlock()
-
-	if _, ok := Rooms[r.id]; len(r.peers) == 0 && ok {
-		log.Errorf("room delete: %s", r.id)
-		delete(Rooms, r.id)
-		return
-	}
-}
-
 func (r *Room) wsListen(peer *peer) {
 	for {
 		message := &websocketMessage{}
 
 		_, raw, err := peer.socket.ReadMessage()
 		if err != nil {
-			log.Errorf("Failed to read message: %v", err)
-
+			fmt.Printf("failed to read websocket message: %v\n", err)
 			r.propagateMessage(&websocketMessage{
 				Event:  "message",
 				Type:   "disconnect",
@@ -200,10 +173,13 @@ func (r *Room) wsListen(peer *peer) {
 			return
 		}
 
-		log.Infof("Got message: %s", raw)
-
 		if err := json.Unmarshal(raw, &message); err != nil {
-			log.Errorf("Failed to unmarshal json to message: %v", err)
+			fmt.Printf("failed to unmarshal websocket message: %v\n", err)
+			r.propagateMessage(&websocketMessage{
+				Event:  "message",
+				Type:   "disconnect",
+				Target: peer.id,
+			})
 			return
 		}
 
@@ -211,49 +187,45 @@ func (r *Room) wsListen(peer *peer) {
 		case "candidate":
 			candidate := webrtc.ICECandidateInit{}
 			if err := json.Unmarshal([]byte(message.Data), &candidate); err != nil {
-				log.Errorf("Failed to unmarshal json to candidate: %v", err)
+				log.Printf("failed to unmarshal ice candidate: %v\n", err)
 				return
 			}
 
-			log.Infof("Got candidate: %v", candidate)
-
 			if err := peer.connection.AddICECandidate(candidate); err != nil {
-				log.Errorf("Failed to add ICE candidate: %v", err)
+				log.Printf("failed to add ice candidate: %v\n", err)
 				return
 			}
 		case "answer":
 			answer := webrtc.SessionDescription{}
 			if err := json.Unmarshal([]byte(message.Data), &answer); err != nil {
-				log.Errorf("Failed to unmarshal json to answer: %v", err)
+				log.Printf("failed to unmarshal answer: %v\n", err)
 				return
 			}
 
-			log.Infof("Got answer: %v", answer)
-
 			if err := peer.connection.SetRemoteDescription(answer); err != nil {
-				log.Errorf("Failed to set remote description: %v", err)
+				log.Printf("failed to set remote description: %v\n", err)
 				return
 			}
 		case "renegotiate":
 			var offer webrtc.SessionDescription
 			if err := json.Unmarshal([]byte(message.Data), &offer); err != nil {
-				log.Infof("Error unmarshaling SDP offer:", err)
+				log.Printf("failed to unmarshal offer: %v\n", err)
 				return
 			}
 
 			if err := peer.connection.SetRemoteDescription(offer); err != nil {
-				log.Infof("Error setting remote description:", err)
+				log.Printf("failed to set remote description: %v\n", err)
 				return
 			}
 
 			answer, err := peer.connection.CreateAnswer(nil)
 			if err != nil {
-				log.Infof("Error creating answer:", err)
+				log.Printf("failed to create answer: %v\n", err)
 				return
 			}
 
 			if err := peer.connection.SetLocalDescription(answer); err != nil {
-				log.Infof("Error setting local description:", err)
+				log.Printf("failed to set local description: %v\n", err)
 				return
 			}
 
@@ -263,22 +235,21 @@ func (r *Room) wsListen(peer *peer) {
 			message.Name = peer.name
 			r.propagateMessage(message)
 		default:
-			log.Errorf("unknown message: %+v", message)
+			log.Printf("unknown event: %s\n", message.Event)
 		}
 	}
 }
 
 func (r *Room) propagateMessage(message *websocketMessage) {
-	r.listLock.Lock()
-	defer r.listLock.Unlock()
-
-	for _, peer := range r.peers {
-		if peer.id == message.ID {
-			continue
+	r.peers.Range(func(id, p any) bool {
+		if id.(string) == message.ID {
+			return true
 		}
 
-		if err := peer.socket.WriteJSON(message); err != nil {
-			log.Errorf("failed to propagate message: %+v", err)
+		if err := p.(*peer).socket.WriteJSON(message); err != nil {
+			log.Printf("failed to write json to %s: %v\n", id.(string), message)
 		}
-	}
+
+		return true
+	})
 }

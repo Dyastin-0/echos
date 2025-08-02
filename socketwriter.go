@@ -9,8 +9,8 @@ import (
 )
 
 type Message struct {
-	Value interface{}
-  ErrCh chan error
+	Value any
+	ErrCh chan error
 }
 
 type ThreadSafeSocketWriter struct {
@@ -33,7 +33,7 @@ func NewThreadSafeSocketWriter(conn *websocket.Conn) *ThreadSafeSocketWriter {
 	return t
 }
 
-func (t *ThreadSafeSocketWriter) WriteJSON(v interface{}) error {
+func (t *ThreadSafeSocketWriter) WriteJSON(v any) error {
 	errCh := make(chan error, 1)
 
 	select {
@@ -79,7 +79,7 @@ func (t *ThreadSafeSocketWriter) Close() {
 	}
 }
 
-func (t *ThreadSafeSocketWriter) WriteWithContext(ctx context.Context, v interface{}) error {
+func (t *ThreadSafeSocketWriter) WriteWithContext(ctx context.Context, v any) error {
 	errCh := make(chan error, 1)
 
 	select {

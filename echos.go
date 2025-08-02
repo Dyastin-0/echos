@@ -1,7 +1,6 @@
 package echos
 
 import (
-	"flag"
 	"net/http"
 	"sync"
 
@@ -10,28 +9,33 @@ import (
 	"github.com/pion/logging"
 )
 
-var (
-	addr       = flag.String("addr", ":8080", "http service address")
-	stunAddr   = flag.String("stunAddr", "stun.l.google.com:19302", "stun server address")
-	Rooms      map[string]*Room
-	roomsMutex sync.RWMutex
-	log        = logging.NewDefaultLoggerFactory().NewLogger("sfu-ws")
-)
+type Echos struct {
+	addr     string
+	stunAddr string
+	Rooms    sync.Map
+	log      logging.LeveledLogger
+}
 
-func Start(upgrader *websocket.Upgrader, auth authFunc) {
-	flag.Parse()
-	Rooms = make(map[string]*Room)
-
-	router := chi.NewRouter()
-
-	router.Use(cors)
-
-	router.Post("/create", CreateRoom)
-	router.Post("/check", CheckRoom)
-	router.Handle("/websocket", WebsocketHandler(upgrader, auth))
-
-	log.Infof("Starting server on %s", *addr)
-	if err := http.ListenAndServe(*addr, router); err != nil {
-		log.Errorf("Failed to start HTTP server: %v", err)
+func New(addr, stunAddr string) *Echos {
+	return &Echos{
+		addr:     addr,
+		stunAddr: stunAddr,
+		log:      logging.NewDefaultLoggerFactory().NewLogger("echos"),
 	}
+}
+
+func (e *Echos) Start(upgrader *websocket.Upgrader, auth authFunc) error {
+	router := chi.NewRouter()
+	router.Use(e.cors)
+
+	router.Post("/create", e.CreateRoom)
+	router.Post("/check", e.CheckRoom)
+	router.Handle("/websocket", e.WebsocketHandler(upgrader, auth))
+
+	e.log.Infof("starting server on %s", e.addr)
+	if err := http.ListenAndServe(e.addr, router); err != nil {
+		return err
+	}
+
+	return nil
 }

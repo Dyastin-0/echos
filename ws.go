@@ -2,31 +2,35 @@ package echos
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 )
 
-func WebsocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerFunc {
+func (e *Echos) WebsocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, rq *http.Request) {
+		enc := json.NewEncoder(w)
+
 		if !auth(rq) {
-			log.Errorf("Failed to upgrade HTTP to Websocket: ", fmt.Errorf("unauthorized"))
+			log.Printf("failed to upgrade connection: unauthorized")
 			return
 		}
 
 		roomID := rq.URL.Query().Get("room")
 		if roomID == "" {
-			log.Errorf("Failed to upgrade HTTP to Websocket: ", fmt.Errorf("bad request"))
 			w.WriteHeader(http.StatusBadRequest)
+			enc.Encode(HTTPresponse{
+				"error": "missing room id",
+			})
 			return
 		}
 
 		peerID := rq.URL.Query().Get("id")
 		if peerID == "" {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(HTTPresponse{
-				"error": "ID missing",
+			enc.Encode(HTTPresponse{
+				"error": "missing peer id",
 			})
 		}
 
@@ -34,37 +38,32 @@ func WebsocketHandler(upgrader *websocket.Upgrader, auth authFunc) http.HandlerF
 		if peerName == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(HTTPresponse{
-				"error": "Name missing",
+				"error": "missing name",
 			})
 		}
 
-		roomsMutex.Lock()
-		r, ok := Rooms[roomID]
+		r, ok := e.Rooms.Load(roomID)
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
-			roomsMutex.Unlock()
 			return
 		}
-		roomsMutex.Unlock()
 
 		conn, err := upgrader.Upgrade(w, rq, nil)
 		if err != nil {
-			log.Errorf("Failed to upgrade HTTP to Websocket: ", err)
+			log.Printf("failed to upgrade connection: %v", err)
 			return
 		}
 
 		ws := NewThreadSafeSocketWriter(conn)
-
 		defer ws.Close()
 
-		peer, err := NewPeer(r, ws, peerID, peerName)
+		peer, err := NewPeer(r.(*Room), ws, peerID, peerName, e.stunAddr)
 		if err != nil {
-			log.Errorf("Failed to creates a PeerConnection: %v", err)
+			log.Printf("failed to create new peer: %v", err)
 			return
 		}
-
 		defer peer.connection.Close()
 
-		r.wsListen(peer)
+		r.(*Room).wsListen(peer)
 	}
 }
