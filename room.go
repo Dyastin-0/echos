@@ -146,7 +146,7 @@ func (r *Room) signalPeerConnections() {
 	for syncAttempt := 0; ; syncAttempt++ {
 		if syncAttempt == 25 {
 			go func() {
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(1 * time.Second)
 				r.signalPeerConnections()
 			}()
 			return
