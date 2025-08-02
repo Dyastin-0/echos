@@ -39,7 +39,7 @@ func (r *Room) addTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
 		panic(err)
 	}
 
-	r.trackLocals.Store(t.ID(), trackLocal)
+	r.trackLocals.Store(t.ID, trackLocal)
 	return trackLocal
 }
 
@@ -72,10 +72,13 @@ func (r *Room) signalPeerConnections() {
 	defer r.dispatchKeyFrame()
 
 	attemptSync := func() (tryAgain bool) {
+		shouldAttempt := false
+
 		r.peers.Range(func(id, p any) bool {
 			if p.(*peer).connection.ConnectionState() == webrtc.PeerConnectionStateClosed {
 				r.peers.Delete(id)
-				return true
+				shouldAttempt = true
+				return false
 			}
 
 			existingSenders := map[string]bool{}
@@ -90,7 +93,8 @@ func (r *Room) signalPeerConnections() {
 				if _, ok := r.trackLocals.Load(sender.Track().ID()); !ok {
 					log.Printf("deleted t: %s\n", sender.Track().ID())
 					if err := p.(*peer).connection.RemoveTrack(sender); err != nil {
-						return true
+						shouldAttempt = true
+						return false
 					}
 				}
 			}
@@ -107,42 +111,56 @@ func (r *Room) signalPeerConnections() {
 				if _, ok := existingSenders[key.(string)]; !ok {
 					track, ok := r.trackLocals.Load(key)
 					if !ok {
-						return true
+						shouldAttempt = true
+						return false
+
 					}
 
 					if _, err := p.(*peer).connection.AddTrack(track.(webrtc.TrackLocal)); err != nil {
-						return true
+						shouldAttempt = true
+						return false
 					}
+
 				}
 
 				return true
 			})
 
+			if shouldAttempt {
+				return false
+			}
+
 			offer, err := p.(*peer).connection.CreateOffer(nil)
 			if err != nil {
-				return true
+				shouldAttempt = true
+				return false
+
 			}
 
 			if err = p.(*peer).connection.SetLocalDescription(offer); err != nil {
-				return true
+				shouldAttempt = true
+				return false
+
 			}
 
 			offerBytes, err := json.Marshal(offer)
 			if err != nil {
-				return true
+				shouldAttempt = true
+				return false
 			}
 
 			if err = p.(*peer).socket.WriteJSON(&websocketMessage{
 				Event: "offer",
 				Data:  string(offerBytes),
 			}); err != nil {
-				return true
+				shouldAttempt = true
+				return false
 			}
 
 			return true
 		})
 
-		return
+		return shouldAttempt
 	}
 
 	for syncAttempt := 0; ; syncAttempt++ {
