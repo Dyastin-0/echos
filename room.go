@@ -39,7 +39,7 @@ func (r *Room) addTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP {
 		panic(err)
 	}
 
-	r.trackLocals.Store(t.ID, trackLocal)
+	r.trackLocals.Store(t.ID(), trackLocal)
 	return trackLocal
 }
 
@@ -47,7 +47,6 @@ func (r *Room) removeTrack(t *webrtc.TrackLocalStaticRTP) {
 	defer r.signalPeerConnections()
 
 	r.trackLocals.Delete(t.ID())
-	log.Printf("deleted: %s\n", t.StreamID())
 }
 
 func (r *Room) dispatchKeyFrame() {
@@ -91,7 +90,6 @@ func (r *Room) signalPeerConnections() {
 				existingSenders[sender.Track().ID()] = true
 
 				if _, ok := r.trackLocals.Load(sender.Track().ID()); !ok {
-					log.Printf("deleted t: %s\n", sender.Track().ID())
 					if err := p.(*peer).connection.RemoveTrack(sender); err != nil {
 						shouldAttempt = true
 						return false
