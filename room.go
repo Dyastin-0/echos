@@ -15,16 +15,26 @@ type Room struct {
 	id          string
 	peers       sync.Map
 	trackLocals sync.Map
+	deletech    chan bool
 }
 
-func NewRoom(id string) *Room {
+func NewRoom(id string, deletech chan bool) *Room {
 	room := Room{
-		id: id,
+		id:       id,
+		deletech: deletech,
 	}
 
 	go func() {
-		for range time.NewTicker(time.Second * 3).C {
-			room.dispatchKeyFrame()
+		ticker := time.NewTicker(time.Second * 3)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				room.dispatchKeyFrame()
+			case <-room.deletech:
+				return
+			}
 		}
 	}()
 
@@ -47,6 +57,21 @@ func (r *Room) removeTrack(t *webrtc.TrackLocalStaticRTP) {
 	defer r.signalPeerConnections()
 
 	r.trackLocals.Delete(t.ID())
+
+	// if there's no peer, signal delete room
+	if r.isEmpty() {
+		r.deletech <- true
+	}
+}
+
+func (r *Room) isEmpty() bool {
+	isEmpty := true
+	r.peers.Range(func(key, value any) bool {
+		isEmpty = false
+		return false
+	})
+
+	return isEmpty
 }
 
 func (r *Room) dispatchKeyFrame() {
@@ -157,6 +182,12 @@ func (r *Room) signalPeerConnections() {
 
 			return true
 		})
+
+		select {
+		case <-r.deletech:
+			return false
+		default:
+		}
 
 		return shouldAttempt
 	}

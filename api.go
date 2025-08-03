@@ -46,7 +46,10 @@ func (e *Echos) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	e.Rooms.Store(roomID, NewRoom(roomID))
+	deletech := make(chan bool, 1)
+
+	e.Rooms.Store(roomID, NewRoom(roomID, deletech))
+	go e.killRoomIfEmpty(roomID, deletech)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

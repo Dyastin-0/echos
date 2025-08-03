@@ -39,3 +39,8 @@ func (e *Echos) Start(upgrader *websocket.Upgrader, auth authFunc) error {
 
 	return nil
 }
+
+func (e *Echos) killRoomIfEmpty(id string, deletech chan bool) {
+	<-deletech
+	e.Rooms.Delete(id)
+}
