@@ -57,11 +57,6 @@ func (r *Room) removeTrack(t *webrtc.TrackLocalStaticRTP) {
 	defer r.signalPeerConnections()
 
 	r.trackLocals.Delete(t.ID())
-
-	// if there's no peer, signal delete room
-	if r.isEmpty() {
-		r.deletech <- true
-	}
 }
 
 func (r *Room) isEmpty() bool {
@@ -101,6 +96,15 @@ func (r *Room) signalPeerConnections() {
 		r.peers.Range(func(id, p any) bool {
 			if p.(*peer).connection.ConnectionState() == webrtc.PeerConnectionStateClosed {
 				r.peers.Delete(id)
+
+				// if there's no peer, signal delete room
+				if r.isEmpty() {
+					r.deletech <- true
+
+					shouldAttempt = false
+					return false
+				}
+
 				shouldAttempt = true
 				return false
 			}
