@@ -10,9 +10,7 @@ import (
 )
 
 type Echos struct {
-	addr     string
-	stunAddr string
-	Rooms    sync.Map
+	addr     string stunAddr string Rooms    sync.Map
 	log      logging.LeveledLogger
 }
 
@@ -28,9 +26,9 @@ func (e *Echos) Start(upgrader *websocket.Upgrader, auth authFunc) error {
 	router := chi.NewRouter()
 	router.Use(e.cors)
 
-	router.Post("/create", e.CreateRoom)
-	router.Post("/check", e.CheckRoom)
-	router.Handle("/websocket", e.WebsocketHandler(upgrader, auth))
+	router.Post("/api/create", e.CreateRoom)
+	router.Post("/api/check", e.CheckRoom)
+	router.Handle("/api/ws", e.WebsocketHandler(upgrader, auth))
 
 	e.log.Infof("starting server on %s", e.addr)
 	if err := http.ListenAndServe(e.addr, router); err != nil {

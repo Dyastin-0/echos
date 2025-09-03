@@ -3,10 +3,9 @@ Description=echos
 After=network.target
 
 [Service]
-User=ubuntu
-WorkingDirectory=/opt/echos
-ExecStart=/opt/echos/echos -addr=:42069 -stunAddr=stun.echos.dyastin.tech:3478
-Restart=always
+User=mrps
+ExecStart=/opt/mrps/echos/echos -addr=:42069
+Restart=Never
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=echos
