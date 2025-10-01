@@ -10,7 +10,9 @@ import (
 )
 
 type Echos struct {
-	addr     string stunAddr string Rooms    sync.Map
+	addr     string
+	stunAddr string
+	Rooms    sync.Map
 	log      logging.LeveledLogger
 }
 
