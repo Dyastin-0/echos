@@ -9,6 +9,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "set echos addr")
 	stunAddr := flag.String("stunAddr", "stun.l.google.com:19302", "set stun server")
+	flag.Parse()
 
 	s := echos.New(*addr, *stunAddr)
 
